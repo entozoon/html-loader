@@ -107,7 +107,8 @@ module.exports = function(content, dwa) {
 
 			// Get any prop values
 			// [ 'foo="bar"', 'baz="jizz"' ]
-			var propList = link.value.match(/\b([^\s]+)(="[^\"]*")/gi);
+			// var propList = link.value.match(/\b([^\s]+)(="[^\"]*")/gi);
+			var propList = link.value.match(/\b([^\s]+)(="([\s\S]*?)")/gi);
 			if (propList) {
 				propList.forEach(function(prop) {
 					var pair = prop.split("=");
@@ -183,10 +184,19 @@ module.exports = function(content, dwa) {
 
 			// Get the props again from the insane ident
 			var props = {};
-			var propList = match.match(/{\b([^\s]+)(="[^\"]*"})/gi);
+			var propList = /{([\s\S]*?)}/g.exec(match);
 			if (propList) {
+				propList = propList[0];
+				propList = propList.substring(1, propList.length - 1);
+				propList = propList.split(",");
+
+				// var propList = match.match(/{\b([^\s]+)(="[^\"]*"})/gi);
+				// var propList = match.match(/{\b([^\s]+)(="([\s\S]*?)"})/gi);
+				// var propList = match.match(/((([^=]+)=((?:"|'))([^"']+)\4) ?)+/gi);
+				// console.log("**************************");
+				// console.log(propList);
 				propList.forEach(function(prop) {
-					var pair = prop.slice(1, prop.length - 1).split("=");
+					var pair = prop.split("=");
 					props[pair[0]] = pair[1].substring(1, pair[1].length - 1);
 				});
 			}
