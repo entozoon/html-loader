@@ -167,7 +167,9 @@ module.exports = function(content, dwa) {
 	}
 
 	content = content.replace(
-		/xxxHTMLLINKxxx[^xxxthiscodeissodumbxxx]*xxxthiscodeissodumbxxx/g,
+		// /xxxHTMLLINKxxx(.*)xxxthiscodeissodumbxxx/g,
+		// https://stackoverflow.com/a/40782646
+		/xxxHTMLLINKxxx([\s\S]*?)xxxthiscodeissodumbxxx/g,
 		function(match) {
 			match = match.replace(/\\"/g, '"');
 			if (!data) return match;
