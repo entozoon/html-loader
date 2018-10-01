@@ -1,6 +1,6 @@
 {
   "name": "html-loader-entozoon",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "author": "Tobias Koppers @sokra and Michael Cook @entozoon",
   "description": "html loader module for webpack",
   "license": "MIT",

@@ -158,47 +158,51 @@ module.exports = function(content, dwa) {
 	} else {
 		content = JSON.stringify(content);
 	}
+
 	var exportsString = "module.exports = ";
 	if (config.exportAsDefault) {
 		exportsString = "exports.default = ";
 	} else if (config.exportAsEs6Default) {
 		exportsString = "export default ";
 	}
-	content = content.replace(/xxxHTMLLINKxxx.*xxxthiscodeissodumbxxx/g, function(
-		match
-	) {
-		match = match.replace(/\\"/g, '"');
-		if (!data) return match;
-		var path = data[match];
-		if (!path) return match;
 
-		var urlToRequest = loaderUtils.urlToRequest(path, root);
+	content = content.replace(
+		/xxxHTMLLINKxxx[^xxxthiscodeissodumbxxx]*xxxthiscodeissodumbxxx/g,
+		function(match) {
+			match = match.replace(/\\"/g, '"');
+			if (!data) return match;
+			var path = data[match];
+			if (!path) return match;
 
-		let fileContent = fs.readFileSync(urlToRequest, "utf8");
-		var contentUpdated = JSON.stringify(fileContent);
+			var urlToRequest = loaderUtils.urlToRequest(path, root);
 
-		// Get the props again from the insane ident
-		var props = {};
-		var propList = match.match(/{\b([^\s]+)(="[^\"]*"})/gi);
-		if (propList) {
-			propList.forEach(function(prop) {
-				var pair = prop.slice(1, prop.length - 1).split("=");
-				props[pair[0]] = pair[1].substring(1, pair[1].length - 1);
+			let fileContent = fs.readFileSync(urlToRequest, "utf8");
+			var contentUpdated = JSON.stringify(fileContent);
+
+			// Get the props again from the insane ident
+			var props = {};
+			var propList = match.match(/{\b([^\s]+)(="[^\"]*"})/gi);
+			if (propList) {
+				propList.forEach(function(prop) {
+					var pair = prop.slice(1, prop.length - 1).split("=");
+					props[pair[0]] = pair[1].substring(1, pair[1].length - 1);
+				});
+			}
+
+			contentUpdated = contentUpdated.replace(/\$\{props.[^}]+\}/g, function(
+				match
+			) {
+				// Sometimes I like the way I code; KISS Method
+				var propKey = match.substring(
+					"${props.".length,
+					match.length - "}".length
+				);
+				return props[propKey] ? props[propKey] : "";
 			});
+
+			return '" + ' + contentUpdated + ' + "';
 		}
-
-		contentUpdated = contentUpdated.replace(/\$\{props.[^}]+\}/g, function(
-			match
-		) {
-			// Sometimes I like the way I code; KISS Method
-			var propKey = match.substring(
-				"${props.".length,
-				match.length - "}".length
-			);
-			return props[propKey] ? props[propKey] : "";
-		});
-
-		return '" + ' + contentUpdated + ' + "';
-	});
+	);
+	// return "module.exports = `" + content + "`;"; // or something
 	return exportsString + content + ";";
 };
