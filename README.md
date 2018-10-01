@@ -13,6 +13,8 @@
   </a>
   <h1>HTML Loader</h1>
   <p>Exports HTML as string. HTML is minimized when the compiler demands.<p>
+
+  <p><strong>Featuring prop concept from <a href="https://github.com/entozoon/html-includes">html-includes</a></strong></p>
 </div>
 
 <h2 align="center">Install</h2>
