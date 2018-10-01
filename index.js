@@ -1,6 +1,6 @@
 /*
-	MIT License http://www.opensource.org/licenses/mit-license.php
-	Author Tobias Koppers @sokra
+MIT License http://www.opensource.org/licenses/mit-license.php
+Author Tobias Koppers @sokra
 */
 var htmlMinifier = require("html-minifier");
 var attrParse = require("./lib/attributesParser");
@@ -8,9 +8,25 @@ var loaderUtils = require("loader-utils");
 var url = require("url");
 var assign = require("object-assign");
 var compile = require("es6-templates").compile;
+var fs = require("fs");
 
 function randomIdent() {
-	return "xxxHTMLLINKxxx" + Math.random() + Math.random() + "xxx";
+	return (
+		"xxxHTMLLINKxxx" + Math.random() + Math.random() + "xxxthiscodeissodumbxxx"
+	);
+}
+
+function randomIdentWithProps(props) {
+	if (!props) return randomIdent();
+	return (
+		"xxxHTMLLINKxxx" +
+		Math.random() +
+		Math.random() +
+		"{" +
+		props +
+		// JSON.stringify(props) +
+		"}xxxthiscodeissodumbxxx"
+	);
 }
 
 function getLoaderConfig(context) {
@@ -26,7 +42,7 @@ function getLoaderConfig(context) {
 	return assign(query, config);
 }
 
-module.exports = function(content) {
+module.exports = function(content, dwa) {
 	this.cacheable && this.cacheable();
 	var config = getLoaderConfig(this);
 	var attributes = ["img:src"];
@@ -36,6 +52,7 @@ module.exports = function(content) {
 		else if (config.attrs === false) attributes = [];
 		else throw new Error("Invalid value to config parameter attrs");
 	}
+
 	var root = config.root;
 	var links = attrParse(content, function(tag, attr) {
 		var res = attributes.find(function(a) {
@@ -49,19 +66,17 @@ module.exports = function(content) {
 	});
 	links.reverse();
 	var data = {};
+	var props = {};
 	content = [content];
 	links.forEach(function(link) {
 		if (!loaderUtils.isUrlRequest(link.value, root)) return;
-
 		if (link.value.indexOf("mailto:") > -1) return;
-
 		var uri = url.parse(link.value);
 		if (uri.hash !== null && uri.hash !== undefined) {
 			uri.hash = null;
 			link.value = uri.format();
 			link.length = link.value.length;
 		}
-
 		do {
 			var ident = randomIdent();
 		} while (data[ident]);
@@ -73,12 +88,11 @@ module.exports = function(content) {
 	});
 	content.reverse();
 	content = content.join("");
-
 	if (config.interpolate === "require") {
 		var reg = /\$\{require\([^)]*\)[^}]*\}/g;
 		var result;
 		var reqList = [];
-		let props = {};
+		props = {};
 		while ((result = reg.exec(content))) {
 			reqList.push({
 				length: result[0].length,
@@ -90,31 +104,32 @@ module.exports = function(content) {
 		content = [content];
 		reqList.forEach(function(link) {
 			var x = content.pop();
+
+			// Get any prop values
+			// [ 'foo="bar"', 'baz="jizz"' ]
+			var propList = link.value.match(/\b([^\s]+)(="[^\"]*")/gi);
+			if (propList) {
+				propList.forEach(function(prop) {
+					var pair = prop.split("=");
+					props[pair[0]] = pair[1].substring(1, pair[1].length - 1);
+				});
+			}
+
 			do {
-				var ident = randomIdent();
+				// Shove props into ident
+				var ident = randomIdentWithProps(propList);
 			} while (data[ident]);
-			// Sprinkling some myke magic to allow flexibility for adding other attributes as params
+			// Sprinkling some myke magic to allow flexibility for requires with props
 			data[ident] = /\([^)]*\)/g.exec(link.value)[0].slice(2, -2);
 			content.push(x.substr(link.start + link.length));
 			content.push(ident);
 			content.push(x.substr(0, link.start));
-			// Get any prop values
-			// [ 'foo="bar"', 'baz="jizz"' ]
-			let propList = link.value.match(/\b([^\s]+)(="(^'|^"|[^\s]+)*")/gi);
-			if (propList) {
-				propList.forEach(prop => {
-					let pair = prop.split("=");
-					props[pair[0]] = pair[1].substring(1, pair[1].length - 1);
-				});
-			}
 		});
 		content.reverse();
 		content = content.join("");
 	}
-
 	if (typeof config.minimize === "boolean" ? config.minimize : this.minimize) {
 		var minimizeOptions = assign({}, config);
-
 		[
 			"removeComments",
 			"removeCommentsFromCDATA",
@@ -133,10 +148,8 @@ module.exports = function(content) {
 				minimizeOptions[name] = true;
 			}
 		});
-
 		content = htmlMinifier.minify(content, minimizeOptions);
 	}
-
 	if (config.interpolate && config.interpolate !== "require") {
 		// Double escape quotes so that they are not unescaped completely in the template string
 		content = content.replace(/\\"/g, '\\\\"');
@@ -145,33 +158,47 @@ module.exports = function(content) {
 	} else {
 		content = JSON.stringify(content);
 	}
-
 	var exportsString = "module.exports = ";
 	if (config.exportAsDefault) {
 		exportsString = "exports.default = ";
 	} else if (config.exportAsEs6Default) {
 		exportsString = "export default ";
 	}
+	content = content.replace(/xxxHTMLLINKxxx.*xxxthiscodeissodumbxxx/g, function(
+		match
+	) {
+		match = match.replace(/\\"/g, '"');
+		if (!data) return match;
+		var path = data[match];
+		if (!path) return match;
 
-	content = content.replace(/xxxHTMLLINKxxx[0-9\.]+xxx/g, function(match) {
-		if (!data[match]) return match;
+		var urlToRequest = loaderUtils.urlToRequest(path, root);
 
-		var urlToRequest;
+		let fileContent = fs.readFileSync(urlToRequest, "utf8");
+		var contentUpdated = JSON.stringify(fileContent);
 
-		if (config.interpolate === "require") {
-			urlToRequest = data[match];
-		} else {
-			urlToRequest = loaderUtils.urlToRequest(data[match], root);
+		// Get the props again from the insane ident
+		var props = {};
+		var propList = match.match(/{\b([^\s]+)(="[^\"]*"})/gi);
+		if (propList) {
+			propList.forEach(function(prop) {
+				var pair = prop.slice(1, prop.length - 1).split("=");
+				props[pair[0]] = pair[1].substring(1, pair[1].length - 1);
+			});
 		}
 
-		return '" + require(' + JSON.stringify(urlToRequest) + ') + "';
-	});
+		contentUpdated = contentUpdated.replace(/\$\{props.[^}]+\}/g, function(
+			match
+		) {
+			// Sometimes I like the way I code; KISS Method
+			var propKey = match.substring(
+				"${props.".length,
+				match.length - "}".length
+			);
+			return props[propKey] ? props[propKey] : "";
+		});
 
-	content = content.replace(/\$\{props.[^}]+\}/g, match => {
-		// Sometimes I like the way I code; KISS Method
-		let propKey = match.substring("${props.".length, match.length - "}".length);
-		return props[propKey] ? props[propKey] : "";
+		return '" + ' + contentUpdated + ' + "';
 	});
-
 	return exportsString + content + ";";
 };
